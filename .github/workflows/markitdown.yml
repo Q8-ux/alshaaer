@@ -1,0 +1,42 @@
+name: Convert documents with MarkItDown
+
+on:
+  push:
+    paths:
+      - "**/*.pdf"
+      - "**/*.docx"
+      - "**/*.pptx"
+      - "**/*.xlsx"
+      - "**/*.xls"
+      - "**/*.msg"
+      - "**/*.eml"
+      - "**/docs/**"
+      - "**/documents/**"
+      - "**/source-documents/**"
+      - "**/markitdown-input/**"
+      - "**/uploads/**"
+  pull_request:
+    paths:
+      - "**/*.pdf"
+      - "**/*.docx"
+      - "**/*.pptx"
+      - "**/*.xlsx"
+      - "**/*.xls"
+      - "**/*.msg"
+      - "**/*.eml"
+      - "**/docs/**"
+      - "**/documents/**"
+      - "**/source-documents/**"
+      - "**/markitdown-input/**"
+      - "**/uploads/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  markitdown:
+    uses: Q8-ux/saad/.github/workflows/reusable-markitdown.yml@main
+    with:
+      source-dir: "."
+      mode: documents
