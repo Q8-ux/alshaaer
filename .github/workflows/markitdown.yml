@@ -15,6 +15,7 @@ on:
       - "**/source-documents/**"
       - "**/markitdown-input/**"
       - "**/uploads/**"
+      - ".github/workflows/markitdown.yml"
   pull_request:
     paths:
       - "**/*.pdf"
@@ -29,6 +30,7 @@ on:
       - "**/source-documents/**"
       - "**/markitdown-input/**"
       - "**/uploads/**"
+      - ".github/workflows/markitdown.yml"
   workflow_dispatch:
 
 permissions:
