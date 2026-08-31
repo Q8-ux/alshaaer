@@ -783,7 +783,7 @@ export default function PoetryStudio() {
 
       <footer className="page-wrap footer">
         <BookOpen size={13} style={{ display: "inline", verticalAlign: "middle", marginLeft: 5 }} />
-        أنت الشاعر • كتابة أصلية مسترشدة بالمرجع النبطي • الفحص الآلي لا يغني عن الأداء والسماع
+        حقوق المحتوى محفوظة © 2026 • أنت الشاعر • كتابة أصلية مسترشدة بالمرجع النبطي • الفحص الآلي لا يغني عن الأداء والسماع
       </footer>
     </div>
   );
