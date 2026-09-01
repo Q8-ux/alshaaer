@@ -1161,7 +1161,7 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 13px;
   margin-bottom: 18px;
 }
@@ -1254,6 +1254,36 @@ button { -webkit-tap-highlight-color: transparent; }
   color: var(--ink);
   font-size: 0.94rem;
 }
+
+.dashboard-filterbar {
+  margin: -8px 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(248, 244, 235, 0.42);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+
+.dashboard-filterbar label { display: grid; gap: 5px; }
+.dashboard-filterbar label > span { color: var(--ink-soft); font-size: 0.76rem; font-weight: 900; }
+.dashboard-filterbar select {
+  min-width: 160px;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  outline: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.dashboard-filterbar select:focus { border-color: rgba(31, 74, 58, 0.46); }
+.dashboard-result-count { margin-right: auto; padding-bottom: 10px; color: var(--ink-soft); font-size: 0.82rem; font-weight: 800; }
 
 .integration-panel { max-width: 760px; display: grid; gap: 17px; }
 .integration-panel-head { display: flex; align-items: flex-start; gap: 13px; }
@@ -1355,6 +1385,7 @@ button { -webkit-tap-highlight-color: transparent; }
   font-size: 0.75rem;
   font-weight: 800;
 }
+.archive-badges span.warning { color: var(--danger); background: rgba(159, 68, 61, 0.07); border-color: rgba(159, 68, 61, 0.16); }
 
 .archive-details {
   border-top: 1px solid var(--line);
@@ -1375,8 +1406,28 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .archive-block.compact { background: rgba(180, 138, 67, 0.07); border-color: rgba(180, 138, 67, 0.16); }
+.archive-block.transcript { background: rgba(72, 101, 121, 0.055); border-color: rgba(72, 101, 121, 0.13); }
 .archive-block h3, .archive-poem h3 { margin: 0 0 8px; color: var(--green); font-size: 0.95rem; }
 .archive-block p { margin: 0; white-space: pre-wrap; line-height: 1.85; }
+
+.archive-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.archive-analysis-grid > div {
+  padding: 12px 13px;
+  border: 1px solid rgba(31, 74, 58, 0.08);
+  border-radius: 12px;
+  background: rgba(31, 74, 58, 0.035);
+}
+.archive-analysis-grid span { color: var(--green); font-size: 0.78rem; font-weight: 900; }
+.archive-analysis-grid p { margin: 5px 0 0; color: var(--ink); line-height: 1.7; }
+
+.archive-block.answers dl { margin: 0; display: grid; gap: 9px; }
+.archive-block.answers dl > div { display: grid; grid-template-columns: minmax(150px, 0.42fr) 1fr; gap: 10px; }
+.archive-block.answers dt { color: var(--ink-soft); font-size: 0.82rem; font-weight: 900; }
+.archive-block.answers dd { margin: 0; }
 
 .archive-audio {
   padding: 14px;
@@ -1386,6 +1437,7 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .archive-audio > div { display: flex; align-items: center; gap: 8px; color: var(--gold-dark); font-weight: 900; }
+.archive-audio > p { margin: 5px 0 0; color: var(--ink-soft); direction: ltr; text-align: right; font-size: 0.8rem; }
 .archive-audio audio { width: 100%; margin-top: 10px; }
 
 .archive-poem {
@@ -1406,6 +1458,30 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .archive-verse i { color: var(--gold); font-style: normal; font-size: 0.72rem; }
+.archive-poem-meta { margin: -3px 0 10px; color: var(--ink-soft); font-size: 0.8rem; }
+
+.archive-pagination {
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.archive-pagination button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--green);
+  background: var(--paper);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.archive-pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+.archive-pagination > span { color: var(--ink-soft); font-size: 0.84rem; font-weight: 800; }
 
 .users-table-wrap { overflow-x: auto; }
 .users-table { width: 100%; border-collapse: collapse; min-width: 920px; }
@@ -1519,6 +1595,8 @@ button { -webkit-tap-highlight-color: transparent; }
   .archive-item > summary { grid-template-columns: 42px minmax(0, 1fr); }
   .archive-badges { grid-column: 1 / -1; justify-content: flex-start; padding-right: 54px; }
   .archive-details { padding: 13px; }
+  .archive-analysis-grid { grid-template-columns: 1fr; }
+  .archive-block.answers dl > div { grid-template-columns: 1fr; gap: 3px; }
   .archive-verse { grid-template-columns: 1fr; gap: 2px; padding: 9px 0; border-bottom: 1px solid rgba(180, 138, 67, 0.12); }
   .archive-verse i { transform: rotate(90deg); }
   .users-table { min-width: 0; }

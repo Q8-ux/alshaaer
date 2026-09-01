@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNotNull, ne } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, like, ne, or } from "drizzle-orm";
 import { ensureRuntimeSchema, getBucket, getDb } from "@/db";
 import { submissions, users, type SubmissionRecord, type UserRecord } from "@/db/schema";
 import { getRuntimeStringBinding } from "@/lib/runtime-bindings";
@@ -226,20 +226,68 @@ export async function listUserArchive(userId: string, limit = 100) {
   return rows.map(publicSubmission);
 }
 
-export async function getAdminDashboard() {
+type AdminDashboardQuery = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sourceMode?: "text" | "audio";
+  state?: "received" | "audio_saved" | "analyzed" | "completed" | "failed";
+};
+
+export async function getAdminDashboard(query: AdminDashboardQuery = {}) {
   const db = getDb();
+  const page = Math.max(1, Math.trunc(query.page || 1));
+  const pageSize = Math.min(100, Math.max(10, Math.trunc(query.pageSize || 50)));
+  const search = query.search?.trim().slice(0, 160) || "";
+  const archiveFilter = and(
+    query.sourceMode ? eq(submissions.sourceMode, query.sourceMode) : undefined,
+    query.state ? eq(submissions.state, query.state) : undefined,
+    search
+      ? or(
+          like(submissions.storyText, `%${search}%`),
+          like(submissions.transcriptionText, `%${search}%`),
+          like(submissions.requestText, `%${search}%`),
+          like(submissions.poemTitle, `%${search}%`),
+          like(submissions.meter, `%${search}%`),
+          like(users.displayName, `%${search}%`),
+          like(users.email, `%${search}%`),
+        )
+      : undefined,
+  );
   const [
     userRows,
     archiveRows,
+    [filteredArchiveTotal],
     [userTotal],
     [archiveTotal],
     [poemTotal],
     [audioTotal],
+    [writtenTotal],
+    [failedTotal],
     perUser,
   ] =
     await Promise.all([
-      db.select().from(users).orderBy(desc(users.createdAt)).limit(300),
-      db.select().from(submissions).orderBy(desc(submissions.createdAt)).limit(300),
+      db.select().from(users).orderBy(desc(users.createdAt)),
+      db
+        .select({
+          submission: submissions,
+          user: {
+            id: users.id,
+            email: users.email,
+            displayName: users.displayName,
+          },
+        })
+        .from(submissions)
+        .leftJoin(users, eq(submissions.userId, users.id))
+        .where(archiveFilter)
+        .orderBy(desc(submissions.createdAt))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize),
+      db
+        .select({ value: count() })
+        .from(submissions)
+        .leftJoin(users, eq(submissions.userId, users.id))
+        .where(archiveFilter),
       db.select({ value: count() }).from(users),
       db.select({ value: count() }).from(submissions),
       db
@@ -251,13 +299,22 @@ export async function getAdminDashboard() {
         .from(submissions)
         .where(isNotNull(submissions.audioKey)),
       db
+        .select({ value: count() })
+        .from(submissions)
+        .where(eq(submissions.sourceMode, "text")),
+      db
+        .select({ value: count() })
+        .from(submissions)
+        .where(eq(submissions.state, "failed")),
+      db
         .select({ userId: submissions.userId, value: count() })
         .from(submissions)
         .groupBy(submissions.userId),
     ]);
 
   const counts = new Map(perUser.map((row) => [row.userId, row.value]));
-  const usersById = new Map(userRows.map((user) => [user.id, user]));
+  const filteredTotal = filteredArchiveTotal?.value || 0;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize));
 
   return {
     metrics: {
@@ -265,18 +322,20 @@ export async function getAdminDashboard() {
       archive: archiveTotal?.value || 0,
       poems: poemTotal?.value || 0,
       audio: audioTotal?.value || 0,
+      written: writtenTotal?.value || 0,
+      failed: failedTotal?.value || 0,
     },
     users: userRows.map((user) => ({ ...user, archiveCount: counts.get(user.id) || 0 })),
-    archive: archiveRows.map((row) => ({
-      ...publicSubmission(row),
-      user: usersById.get(row.userId)
-        ? {
-            id: usersById.get(row.userId)!.id,
-            email: usersById.get(row.userId)!.email,
-            displayName: usersById.get(row.userId)!.displayName,
-          }
-        : null,
+    archive: archiveRows.map(({ submission, user }) => ({
+      ...publicSubmission(submission),
+      user,
     })),
+    pagination: {
+      page: Math.min(page, totalPages),
+      pageSize,
+      total: filteredTotal,
+      totalPages,
+    },
   };
 }
 

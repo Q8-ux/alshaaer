@@ -23,7 +23,7 @@ export default function AdminLogin() {
       });
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error || "تعذّر تسجيل الدخول.");
-      window.location.assign("/admin");
+      window.location.assign("/control-center");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "تعذّر تسجيل الدخول.");
     } finally {

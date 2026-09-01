@@ -166,10 +166,104 @@ test("allows temporary guest access while preserving user and admin authenticati
   const anonymousSettings = await appFetch("/api/admin/integrations/twilio");
   assert.equal(anonymousSettings.status, 401);
 
+  const anonymousDashboard = await appFetch("/api/admin");
+  assert.equal(anonymousDashboard.status, 401);
+
+  const anonymousControlCenter = await appFetch("/control-center", { redirect: "manual" });
+  assert.ok(anonymousControlCenter.status >= 300 && anonymousControlCenter.status < 400);
+  assert.equal(
+    new URL(anonymousControlCenter.headers.get("location"), "http://terminal.local").pathname,
+    "/control-center/login",
+  );
+
   const adminLogin = await post("/api/admin/session", { email: adminEmail, password: adminPassword });
   assert.equal(adminLogin.status, 200);
   const adminCookie = responseCookie(adminLogin);
   assert.ok(adminCookie.startsWith("ant_alshaer_admin_session="));
+
+  const controlCenter = await appFetch("/control-center", { headers: { cookie: adminCookie } });
+  assert.equal(controlCenter.status, 200);
+  assert.match(await controlCenter.text(), /مركز بيانات/);
+
+  const storedUser = await env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
+  assert.ok(storedUser?.id);
+  const enrichedSubmissionId = crypto.randomUUID();
+  const audioKey = `audio/${storedUser.id}/${enrichedSubmissionId}/story.webm`;
+  const audioBody = new TextEncoder().encode("audio-test");
+  await env.BUCKET.put(audioKey, audioBody, {
+    httpMetadata: { contentType: "audio/webm" },
+  });
+  const analysisJson = JSON.stringify({
+    story_summary: "ملخص قصير للقصة",
+    emotional_core: "الوفاء",
+    recommended_purpose: "حكمة",
+    recommended_meter: "المسحوب",
+    meter_reason: "يلائم السرد",
+    suggested_tone: "هادئة",
+    questions: [{ id: "ending", question: "كيف تريد الخاتمة؟" }],
+  });
+  const answersJson = JSON.stringify({ ending: "متفائلة", custom_request: "خاتمة قوية" });
+  const poemJson = JSON.stringify({
+    title: "قصيدة الاختبار",
+    meter: "المسحوب",
+    verses: [{ sadr: "صدر البيت", ajz: "عجز البيت" }],
+  });
+  await env.DB.prepare(
+    `INSERT INTO submissions (
+      id, user_id, source_mode, story_text, audio_key, audio_filename, audio_content_type,
+      audio_size, audio_duration_seconds, transcription_text, analysis_json, request_text,
+      answers_json, poem_json, poem_title, meter, verse_count, state, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      enrichedSubmissionId,
+      storedUser.id,
+      "audio",
+      "وصف قصيدة اختبارية مميزة",
+      audioKey,
+      "story.webm",
+      "audio/webm",
+      audioBody.byteLength,
+      73,
+      "تفريغ التسجيل الصوتي",
+      analysisJson,
+      "خاتمة قوية",
+      answersJson,
+      poemJson,
+      "قصيدة الاختبار",
+      "المسحوب",
+      1,
+      "completed",
+      createdAt,
+      createdAt,
+    )
+    .run();
+
+  const dashboard = await appFetch(
+    "/api/admin?page=1&pageSize=10&sourceMode=audio&state=completed&search=%D9%85%D9%85%D9%8A%D8%B2%D8%A9",
+    { headers: { cookie: adminCookie } },
+  );
+  assert.equal(dashboard.status, 200);
+  const dashboardData = await dashboard.json();
+  assert.equal(dashboardData.pagination.total, 1);
+  assert.equal(dashboardData.pagination.pageSize, 10);
+  assert.equal(dashboardData.archive.length, 1);
+  assert.equal(dashboardData.archive[0].transcriptionText, "تفريغ التسجيل الصوتي");
+  assert.equal(dashboardData.archive[0].analysis.emotional_core, "الوفاء");
+  assert.equal(dashboardData.archive[0].answers.ending, "متفائلة");
+  assert.equal(dashboardData.archive[0].audioDurationSeconds, 73);
+  assert.equal(dashboardData.archive[0].poem.verses[0].sadr, "صدر البيت");
+
+  const protectedAudio = await appFetch(`/api/audio/${enrichedSubmissionId}`, {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(
+    protectedAudio.status,
+    200,
+    protectedAudio.status === 200 ? undefined : await protectedAudio.clone().text(),
+  );
+  assert.match(protectedAudio.headers.get("cache-control") || "", /no-store/);
+  assert.equal(await protectedAudio.text(), "audio-test");
 
   const initialSettings = await appFetch("/api/admin/integrations/twilio", {
     headers: { cookie: adminCookie },
