@@ -250,6 +250,72 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .main-card { padding: clamp(20px, 4vw, 34px); }
 
+.creation-progress {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0 0 18px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.creation-progress li {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.creation-progress li > span {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.creation-progress li.active { color: var(--green-deep); }
+.creation-progress li.active > span {
+  color: #fff;
+  border-color: var(--green);
+  background: var(--green);
+  box-shadow: 0 8px 20px rgba(31, 74, 58, 0.18);
+}
+
+.creation-progress li.complete { color: var(--green); }
+.creation-progress li.complete > span {
+  color: var(--green);
+  border-color: rgba(31, 74, 58, 0.2);
+  background: rgba(31, 74, 58, 0.08);
+}
+
+.draft-status {
+  margin: 0 0 20px;
+  min-height: 42px;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(31, 74, 58, 0.14);
+  border-radius: 14px;
+  background: rgba(31, 74, 58, 0.055);
+  color: var(--green);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.draft-status svg { flex: 0 0 auto; color: var(--gold-dark); }
+
 .step-row {
   display: flex;
   align-items: center;
@@ -1427,6 +1493,8 @@ button { -webkit-tap-highlight-color: transparent; }
   .hero h1 { font-size: 2.45rem; }
   .hero p { font-size: 0.94rem; line-height: 1.85; }
   .main-card { border-radius: 24px; }
+  .creation-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 8px; }
+  .creation-progress li { font-size: 0.86rem; }
   .step-row { align-items: flex-start; flex-direction: column; }
   .text-tabs { width: 100%; }
   .tab-button { flex: 1; justify-content: center; }
