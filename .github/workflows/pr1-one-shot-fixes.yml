@@ -32,79 +32,74 @@ jobs:
 
           path = Path('components/PoetryStudio.tsx')
           text = path.read_text()
-
           replacements = [
-              (
-                  'const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;\n',
-                  'const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;\nconst GUEST_DRAFT_STORAGE_KEY = `${DRAFT_STORAGE_KEY}:guest-device`;\n\nconst draftStorageKeyFor = (user: CurrentUser) =>\n  user.isGuest ? GUEST_DRAFT_STORAGE_KEY : `${DRAFT_STORAGE_KEY}:${user.id}`;\n',
-              ),
-              (
-                  '  const timer = window.setTimeout(() => controller.abort("timeout"), timeoutMs);',
-                  '  const timer = window.setTimeout(() => controller.abort(), timeoutMs);',
-              ),
-              (
-                  '  const resultRef = useRef<HTMLDivElement | null>(null);\n  const draftStorageKey = currentUser ? `${DRAFT_STORAGE_KEY}:${currentUser.id}` : null;',
-                  '  const resultRef = useRef<HTMLDivElement | null>(null);\n  const storyRevisionRef = useRef(0);\n  const draftStorageKey = currentUser ? draftStorageKeyFor(currentUser) : null;',
-              ),
-              (
-                  '          const saved = loadSavedDraft(`${DRAFT_STORAGE_KEY}:${user.id}`);',
-                  '          const saved = loadSavedDraft(draftStorageKeyFor(user));',
-              ),
-              (
-                  '    setBusy("analyze");\n    setError("");\n    setPoem(null);\n    try {',
-                  '    const storyRevision = storyRevisionRef.current;\n    setBusy("analyze");\n    setError("");\n    setPoem(null);\n    try {',
-              ),
-              (
-                  '      })) as Analysis;\n      setAnalysis(data);',
-                  '      })) as Analysis;\n      if (storyRevision !== storyRevisionRef.current) return;\n      setAnalysis(data);',
-              ),
-              (
-                  '    setBusy("generate");\n    setError("");\n    try {',
-                  '    const storyRevision = storyRevisionRef.current;\n    setBusy("generate");\n    setError("");\n    try {',
-              ),
-              (
-                  '      })) as Poem;\n      setPoem(data);\n      if (data.submission_id) setSubmissionId(data.submission_id);\n    } catch (requestError) {\n      setError(requestErrorMessage(requestError, "تعذّر توليد الأبيات."));',
-                  '      })) as Poem;\n      if (storyRevision !== storyRevisionRef.current) return;\n      setPoem(data);\n      if (data.submission_id) setSubmissionId(data.submission_id);\n    } catch (requestError) {\n      setError(requestErrorMessage(requestError, "تعذّر توليد الأبيات."));',
-              ),
-              (
-                  '      if (!response.ok) throw new Error(data.error || "تعذّر تفريغ التسجيل.");\n      setStory(data.text || "");',
-                  '      if (!response.ok) throw new Error(data.error || "تعذّر تفريغ التسجيل.");\n      storyRevisionRef.current += 1;\n      setStory(data.text || "");',
-              ),
-              (
-                  '  const reset = () => {\n    setStory("");',
-                  '  const reset = () => {\n    storyRevisionRef.current += 1;\n    setStory("");',
-              ),
-              (
-                  '  const updateStory = (value: string) => {\n    setStory(value);',
-                  '  const updateStory = (value: string) => {\n    storyRevisionRef.current += 1;\n    setStory(value);',
-              ),
+              ('const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;\n', 'const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;\nconst GUEST_DRAFT_STORAGE_KEY = `${DRAFT_STORAGE_KEY}:guest-device`;\n\nconst draftStorageKeyFor = (user: CurrentUser) =>\n  user.isGuest ? GUEST_DRAFT_STORAGE_KEY : `${DRAFT_STORAGE_KEY}:${user.id}`;\n'),
+              ('  const timer = window.setTimeout(() => controller.abort("timeout"), timeoutMs);', '  const timer = window.setTimeout(() => controller.abort(), timeoutMs);'),
+              ('  const resultRef = useRef<HTMLDivElement | null>(null);\n  const draftStorageKey = currentUser ? `${DRAFT_STORAGE_KEY}:${currentUser.id}` : null;', '  const resultRef = useRef<HTMLDivElement | null>(null);\n  const storyRevisionRef = useRef(0);\n  const draftStorageKey = currentUser ? draftStorageKeyFor(currentUser) : null;'),
+              ('          const saved = loadSavedDraft(`${DRAFT_STORAGE_KEY}:${user.id}`);', '          const saved = loadSavedDraft(draftStorageKeyFor(user));'),
+              ('    setBusy("analyze");\n    setError("");\n    setPoem(null);\n    try {', '    const storyRevision = storyRevisionRef.current;\n    setBusy("analyze");\n    setError("");\n    setPoem(null);\n    try {'),
+              ('      })) as Analysis;\n      setAnalysis(data);', '      })) as Analysis;\n      if (storyRevision !== storyRevisionRef.current) return;\n      setAnalysis(data);'),
+              ('    setBusy("generate");\n    setError("");\n    try {', '    const storyRevision = storyRevisionRef.current;\n    setBusy("generate");\n    setError("");\n    try {'),
+              ('      })) as Poem;\n      setPoem(data);\n      if (data.submission_id) setSubmissionId(data.submission_id);\n    } catch (requestError) {\n      setError(requestErrorMessage(requestError, "تعذّر توليد الأبيات."));', '      })) as Poem;\n      if (storyRevision !== storyRevisionRef.current) return;\n      setPoem(data);\n      if (data.submission_id) setSubmissionId(data.submission_id);\n    } catch (requestError) {\n      setError(requestErrorMessage(requestError, "تعذّر توليد الأبيات."));'),
+              ('    setBusy("revise");\n    setError("");\n    try {', '    const storyRevision = storyRevisionRef.current;\n    setBusy("revise");\n    setError("");\n    try {'),
+              ('      })) as Poem;\n      setPoem(data);\n      if (data.submission_id) setSubmissionId(data.submission_id);\n    } catch (requestError) {\n      setError(requestErrorMessage(requestError, "تعذّر تعديل الأبيات."));', '      })) as Poem;\n      if (storyRevision !== storyRevisionRef.current) return;\n      setPoem(data);\n      if (data.submission_id) setSubmissionId(data.submission_id);\n    } catch (requestError) {\n      setError(requestErrorMessage(requestError, "تعذّر تعديل الأبيات."));'),
+              ('      if (!response.ok) throw new Error(data.error || "تعذّر تفريغ التسجيل.");\n      setStory(data.text || "");', '      if (!response.ok) throw new Error(data.error || "تعذّر تفريغ التسجيل.");\n      storyRevisionRef.current += 1;\n      setStory(data.text || "");'),
+              ('  const reset = () => {\n    setStory("");', '  const reset = () => {\n    storyRevisionRef.current += 1;\n    setStory("");'),
+              ('  const updateStory = (value: string) => {\n    setStory(value);', '  const updateStory = (value: string) => {\n    storyRevisionRef.current += 1;\n    setStory(value);'),
           ]
-
           for old, new in replacements:
               if old not in text:
-                  raise SystemExit(f'Expected PoetryStudio snippet not found: {old[:80]!r}')
+                  raise SystemExit(f'Expected PoetryStudio snippet not found: {old[:100]!r}')
               text = text.replace(old, new, 1)
-
           path.write_text(text)
 
-          health = Path('app/api/health/route.ts')
-          health.write_text('''import { getRuntimeBindings } from "@/lib/runtime-bindings";\n\nexport const runtime = "edge";\n\nconst hasValidSessionSecret = (secret: string | undefined) => {\n  if (!secret || !/^[A-Za-z0-9_-]+$/.test(secret)) return false;\n  try {\n    const normalized = secret.replace(/-/g, "+").replace(/_/g, "/");\n    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");\n    return atob(padded).length >= 32;\n  } catch {\n    return false;\n  }\n};\n\nexport async function GET() {\n  const bindings = getRuntimeBindings();\n  const components = {\n    database: Boolean(bindings.DB),\n    audio_storage: Boolean(bindings.BUCKET),\n    writing_engine: Boolean(bindings.OPENAI_API_KEY),\n    session_security: hasValidSessionSecret(bindings.USER_AUTH_SECRET),\n  };\n  const ok = Object.values(components).every(Boolean);\n\n  return Response.json(\n    {\n      ok,\n      status: ok ? "ready" : "degraded",\n      service: "ant-alshaer",\n      components,\n    },\n    {\n      status: ok ? 200 : 503,\n      headers: { "Cache-Control": "no-store" },\n    },\n  );\n}\n''')
+          Path('app/api/health/route.ts').write_text('''import { getRuntimeBindings } from "@/lib/runtime-bindings";\n\nexport const runtime = "edge";\n\nconst hasValidSessionSecret = (secret: string | undefined) => {\n  if (!secret || !/^[A-Za-z0-9_-]+$/.test(secret)) return false;\n  try {\n    const normalized = secret.replace(/-/g, "+").replace(/_/g, "/");\n    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");\n    return atob(padded).length >= 32;\n  } catch {\n    return false;\n  }\n};\n\nexport async function GET() {\n  const bindings = getRuntimeBindings();\n  const components = {\n    database: Boolean(bindings.DB),\n    audio_storage: Boolean(bindings.BUCKET),\n    writing_engine: Boolean(bindings.OPENAI_API_KEY),\n    session_security: hasValidSessionSecret(bindings.USER_AUTH_SECRET),\n  };\n  const ok = Object.values(components).every(Boolean);\n  return Response.json(\n    { ok, status: ok ? "ready" : "degraded", service: "ant-alshaer", components },\n    { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } },\n  );\n}\n''')
           PY
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify
-        run: |
-          npm test
-          npm run lint
-
-      - name: Commit fixes and remove one-shot workflow
+      - name: Verify and capture diagnostics
+        id: verify
         shell: bash
         run: |
-          rm .github/workflows/pr1-one-shot-fixes.yml
+          set +e
+          npm test > /tmp/test.log 2>&1
+          TEST_STATUS=$?
+          npm run lint > /tmp/lint.log 2>&1
+          LINT_STATUS=$?
+          set -e
+          {
+            echo "TEST_STATUS=$TEST_STATUS"
+            echo "LINT_STATUS=$LINT_STATUS"
+            echo ""
+            echo "===== npm test ====="
+            cat /tmp/test.log
+            echo ""
+            echo "===== npm run lint ====="
+            cat /tmp/lint.log
+          } > ci-review-diagnostics.txt
+          echo "test_status=$TEST_STATUS" >> "$GITHUB_OUTPUT"
+          echo "lint_status=$LINT_STATUS" >> "$GITHUB_OUTPUT"
+
+      - name: Commit verified fixes
+        if: steps.verify.outputs.test_status == '0' && steps.verify.outputs.lint_status == '0'
+        shell: bash
+        run: |
+          rm .github/workflows/pr1-one-shot-fixes.yml ci-review-diagnostics.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add components/PoetryStudio.tsx app/api/health/route.ts .github/workflows/pr1-one-shot-fixes.yml
           git commit -m "fix: address remaining reliability review findings"
           git push origin HEAD:codex/ant-alshaer-reliability-20260901
+
+      - name: Commit diagnostics on failure
+        if: steps.verify.outputs.test_status != '0' || steps.verify.outputs.lint_status != '0'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/PoetryStudio.tsx app/api/health/route.ts ci-review-diagnostics.txt
+          git commit -m "chore: capture reliability fix diagnostics"
+          git push origin HEAD:codex/ant-alshaer-reliability-20260901
+          exit 1
