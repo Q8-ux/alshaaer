@@ -94,6 +94,10 @@ type SavedDraft = {
 
 const DRAFT_STORAGE_KEY = "ant_alshaer_draft_v1";
 const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const GUEST_DRAFT_STORAGE_KEY = `${DRAFT_STORAGE_KEY}:guest-device`;
+
+const draftStorageKeyFor = (user: CurrentUser) =>
+  user.isGuest ? GUEST_DRAFT_STORAGE_KEY : `${DRAFT_STORAGE_KEY}:${user.id}`;
 
 const loadSavedDraft = (storageKey: string) => {
   try {
@@ -141,7 +145,7 @@ const fetchWithTimeout = async (
   timeoutMs = 120_000,
 ) => {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort("timeout"), timeoutMs);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } finally {
@@ -187,7 +191,8 @@ export default function PoetryStudio() {
   const recordStartedAtRef = useRef<number | null>(null);
   const writingRef = useRef<HTMLDivElement | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
-  const draftStorageKey = currentUser ? `${DRAFT_STORAGE_KEY}:${currentUser.id}` : null;
+  const storyRevisionRef = useRef(0);
+  const draftStorageKey = currentUser ? draftStorageKeyFor(currentUser) : null;
 
   useEffect(() => {
     if (!draftReady || !draftStorageKey) return;
@@ -230,7 +235,7 @@ export default function PoetryStudio() {
         if (!active) return;
         if (user) {
           setCurrentUser(user);
-          const saved = loadSavedDraft(`${DRAFT_STORAGE_KEY}:${user.id}`);
+          const saved = loadSavedDraft(draftStorageKeyFor(user));
           if (saved) {
             setStory(saved.story);
             setSubmissionId(saved.submissionId || null);
@@ -295,6 +300,7 @@ export default function PoetryStudio() {
       setError("اكتب تفاصيل أكثر قليلًا حتى نفهم المعنى الذي تريد تحويله إلى شعر.");
       return;
     }
+    const storyRevision = storyRevisionRef.current;
     setBusy("analyze");
     setError("");
     setPoem(null);
@@ -304,6 +310,7 @@ export default function PoetryStudio() {
         story: story.trim(),
         submission_id: submissionId || undefined,
       })) as Analysis;
+      if (storyRevision !== storyRevisionRef.current) return;
       setAnalysis(data);
       setAnalysisStory(story.trim());
       if (data.submission_id) setSubmissionId(data.submission_id);
@@ -324,6 +331,7 @@ export default function PoetryStudio() {
       setError("تغيّرت القصة بعد التحليل. حلّل النسخة الحالية أولًا حتى لا تُبنى القصيدة على فهم قديم.");
       return;
     }
+    const storyRevision = storyRevisionRef.current;
     setBusy("generate");
     setError("");
     try {
@@ -337,6 +345,7 @@ export default function PoetryStudio() {
         analysis,
         answers: generationAnswers,
       })) as Poem;
+      if (storyRevision !== storyRevisionRef.current) return;
       setPoem(data);
       if (data.submission_id) setSubmissionId(data.submission_id);
     } catch (requestError) {
@@ -348,6 +357,7 @@ export default function PoetryStudio() {
 
   const revisePoem = async (instruction: string) => {
     if (!analysis || !poem) return;
+    const storyRevision = storyRevisionRef.current;
     setBusy("revise");
     setError("");
     try {
@@ -363,6 +373,7 @@ export default function PoetryStudio() {
         current_poem: poem,
         revision_instruction: instruction,
       })) as Poem;
+      if (storyRevision !== storyRevisionRef.current) return;
       setPoem(data);
       if (data.submission_id) setSubmissionId(data.submission_id);
     } catch (requestError) {
@@ -390,6 +401,7 @@ export default function PoetryStudio() {
         submission_id?: string;
       };
       if (!response.ok) throw new Error(data.error || "تعذّر تفريغ التسجيل.");
+      storyRevisionRef.current += 1;
       setStory(data.text || "");
       setAnalysis(null);
       setAnalysisStory("");
@@ -470,6 +482,7 @@ export default function PoetryStudio() {
   };
 
   const reset = () => {
+    storyRevisionRef.current += 1;
     setStory("");
     setSubmissionId(null);
     setAnalysis(null);
@@ -491,6 +504,7 @@ export default function PoetryStudio() {
   };
 
   const updateStory = (value: string) => {
+    storyRevisionRef.current += 1;
     setStory(value);
     setDraftRestored(false);
     if (analysis && value.trim() !== analysisStory) {
