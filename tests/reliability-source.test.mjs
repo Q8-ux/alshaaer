@@ -4,24 +4,33 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("preserves a bounded local draft and invalidates stale analysis", async () => {
+test("preserves bounded drafts and invalidates stale async results", async () => {
   const studio = await read("components/PoetryStudio.tsx");
 
   assert.match(studio, /DRAFT_STORAGE_KEY/);
   assert.match(studio, /DRAFT_TTL_MS\s*=\s*30/);
+  assert.match(studio, /GUEST_DRAFT_STORAGE_KEY/);
+  assert.match(studio, /guest-device/);
+  assert.match(studio, /user\.isGuest\s*\?\s*GUEST_DRAFT_STORAGE_KEY/);
+  assert.match(studio, /`\$\{DRAFT_STORAGE_KEY}:\$\{user\.id}`/);
   assert.match(studio, /localStorage\.setItem/);
-  assert.match(studio, /DRAFT_STORAGE_KEY}:\$\{currentUser\.id}/);
   assert.match(studio, /analysisStory\s*!==\s*story\.trim\(\)/);
+  assert.match(studio, /storyRevisionRef/);
+  assert.match(studio, /storyRevision\s*!==\s*storyRevisionRef\.current/);
+  assert.match(studio, /controller\.abort\(\)/);
+  assert.doesNotMatch(studio, /controller\.abort\("timeout"\)/);
   assert.match(studio, /creation-progress/);
 });
 
-test("exposes a non-mutating operational health check", async () => {
+test("exposes a non-mutating operational health check with a valid session secret requirement", async () => {
   const route = await read("app/api/health/route.ts");
 
   assert.match(route, /DB/);
   assert.match(route, /BUCKET/);
   assert.match(route, /OPENAI_API_KEY/);
   assert.match(route, /USER_AUTH_SECRET/);
+  assert.match(route, /hasValidSessionSecret/);
+  assert.match(route, /atob\(padded\)\.length\s*>=\s*32/);
   assert.match(route, /status:\s*ok\s*\?\s*"ready"\s*:\s*"degraded"/);
   assert.match(route, /"Cache-Control":\s*"no-store"/);
 });
