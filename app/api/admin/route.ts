@@ -10,11 +10,24 @@ const UserUpdateSchema = z.object({
   role: z.enum(["admin", "user"]).optional(),
 });
 
-export async function GET() {
+const DashboardQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(10).max(100).default(50),
+  search: z.string().trim().max(160).default(""),
+  sourceMode: z.enum(["text", "audio"]).optional(),
+  state: z.enum(["received", "audio_saved", "analyzed", "completed", "failed"]).optional(),
+});
+
+export async function GET(request: Request) {
   try {
     await requireAdminUser();
-    return Response.json(await getAdminDashboard());
+    const url = new URL(request.url);
+    const query = DashboardQuerySchema.parse(Object.fromEntries(url.searchParams));
+    return Response.json(await getAdminDashboard(query));
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return Response.json({ error: "خيارات تصفح الأرشيف غير صالحة." }, { status: 400 });
+    }
     return appErrorResponse(error);
   }
 }

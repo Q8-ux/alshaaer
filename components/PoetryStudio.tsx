@@ -73,10 +73,53 @@ type Poem = {
 };
 
 type CurrentUser = {
+  id: string;
   displayName: string;
   email: string;
   role: "admin" | "user";
   isGuest: boolean;
+};
+
+type SavedDraft = {
+  version: 1;
+  story: string;
+  submissionId: string | null;
+  analysis: Analysis | null;
+  analysisStory: string;
+  answers: Record<string, string>;
+  poetryRequest: string;
+  poem: Poem | null;
+  savedAt: number;
+};
+
+const DRAFT_STORAGE_KEY = "ant_alshaer_draft_v1";
+const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const GUEST_DRAFT_STORAGE_KEY = `${DRAFT_STORAGE_KEY}:guest-device`;
+
+const draftStorageKeyFor = (user: CurrentUser) =>
+  user.isGuest ? GUEST_DRAFT_STORAGE_KEY : `${DRAFT_STORAGE_KEY}:${user.id}`;
+
+const loadSavedDraft = (storageKey: string) => {
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    const saved = raw ? (JSON.parse(raw) as SavedDraft) : null;
+    const valid = Boolean(
+      saved &&
+        saved.version === 1 &&
+        typeof saved.story === "string" &&
+        Number.isFinite(saved.savedAt) &&
+        Date.now() - saved.savedAt <= DRAFT_TTL_MS,
+    );
+    if (valid && saved) return saved;
+    if (raw) window.localStorage.removeItem(storageKey);
+  } catch {
+    try {
+      window.localStorage.removeItem(storageKey);
+    } catch {
+      // Storage availability is optional.
+    }
+  }
+  return null;
 };
 
 const LoadingDots = () => (
@@ -96,7 +139,24 @@ const exampleStory =
 const examplePoetryRequest =
   "مثلاً: أريدها وصية لابني بلهجة كويتية، من ثمانية أبيات، فيها حكمة وتحذير من غدر الزمان، وتكون الخاتمة قوية وغير مقطوعة.";
 
+const fetchWithTimeout = async (
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs = 120_000,
+) => {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+};
+
 const requestErrorMessage = (requestError: unknown, fallback: string) => {
+  if (requestError instanceof DOMException && requestError.name === "AbortError") {
+    return "استغرق الطلب وقتًا أطول من المتوقع. قصتك محفوظة؛ أعد المحاولة من المرحلة نفسها.";
+  }
   if (
     requestError instanceof TypeError ||
     (requestError instanceof Error &&
@@ -112,6 +172,7 @@ export default function PoetryStudio() {
   const [story, setStory] = useState("");
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [analysisStory, setAnalysisStory] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [poetryRequest, setPoetryRequest] = useState("");
   const [poem, setPoem] = useState<Poem | null>(null);
@@ -121,21 +182,77 @@ export default function PoetryStudio() {
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [copied, setCopied] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordStartedAtRef = useRef<number | null>(null);
   const writingRef = useRef<HTMLDivElement | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
+  const storyRevisionRef = useRef(0);
+  const draftStorageKey = currentUser ? draftStorageKeyFor(currentUser) : null;
+
+  useEffect(() => {
+    if (!draftReady || !draftStorageKey) return;
+    if (!story.trim() && !analysis && !poem) {
+      try {
+        window.localStorage.removeItem(draftStorageKey);
+      } catch {
+        // Storage availability is optional.
+      }
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const savedAt = Date.now();
+      const draft: SavedDraft = {
+        version: 1,
+        story,
+        submissionId,
+        analysis,
+        analysisStory,
+        answers,
+        poetryRequest,
+        poem,
+        savedAt,
+      };
+      try {
+        window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+        setDraftSavedAt(savedAt);
+      } catch {
+        // Private browsing and storage quotas must not block the writing flow.
+      }
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [analysis, analysisStory, answers, draftReady, draftStorageKey, poem, poetryRequest, story, submissionId]);
 
   useEffect(() => {
     let active = true;
     fetch("/api/me", { cache: "no-store" })
       .then(async (response) => (response.ok ? ((await response.json()) as CurrentUser) : null))
       .then((user) => {
-        if (active && user) setCurrentUser(user);
+        if (!active) return;
+        if (user) {
+          setCurrentUser(user);
+          const saved = loadSavedDraft(draftStorageKeyFor(user));
+          if (saved) {
+            setStory(saved.story);
+            setSubmissionId(saved.submissionId || null);
+            setAnalysis(saved.analysis || null);
+            setAnalysisStory(saved.analysisStory || (saved.analysis ? saved.story.trim() : ""));
+            setAnswers(saved.answers || {});
+            setPoetryRequest(saved.poetryRequest || "");
+            setPoem(saved.poem || null);
+            setDraftSavedAt(saved.savedAt);
+            setDraftRestored(Boolean(saved.story.trim()));
+          }
+        }
+        setDraftReady(true);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (active) setDraftReady(true);
+      });
     return () => {
       active = false;
     };
@@ -166,7 +283,7 @@ export default function PoetryStudio() {
   }, [poem]);
 
   const apiRequest = async (payload: Record<string, unknown>) => {
-    const response = await fetch("/api/poetry", {
+    const response = await fetchWithTimeout("/api/poetry", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -183,6 +300,7 @@ export default function PoetryStudio() {
       setError("اكتب تفاصيل أكثر قليلًا حتى نفهم المعنى الذي تريد تحويله إلى شعر.");
       return;
     }
+    const storyRevision = storyRevisionRef.current;
     setBusy("analyze");
     setError("");
     setPoem(null);
@@ -192,7 +310,9 @@ export default function PoetryStudio() {
         story: story.trim(),
         submission_id: submissionId || undefined,
       })) as Analysis;
+      if (storyRevision !== storyRevisionRef.current) return;
       setAnalysis(data);
+      setAnalysisStory(story.trim());
       if (data.submission_id) setSubmissionId(data.submission_id);
       setAnswers(
         Object.fromEntries(data.questions.map((question) => [question.id, question.options[0] || ""])),
@@ -207,6 +327,11 @@ export default function PoetryStudio() {
 
   const generatePoem = async () => {
     if (!analysis) return;
+    if (analysisStory !== story.trim()) {
+      setError("تغيّرت القصة بعد التحليل. حلّل النسخة الحالية أولًا حتى لا تُبنى القصيدة على فهم قديم.");
+      return;
+    }
+    const storyRevision = storyRevisionRef.current;
     setBusy("generate");
     setError("");
     try {
@@ -220,6 +345,7 @@ export default function PoetryStudio() {
         analysis,
         answers: generationAnswers,
       })) as Poem;
+      if (storyRevision !== storyRevisionRef.current) return;
       setPoem(data);
       if (data.submission_id) setSubmissionId(data.submission_id);
     } catch (requestError) {
@@ -231,6 +357,7 @@ export default function PoetryStudio() {
 
   const revisePoem = async (instruction: string) => {
     if (!analysis || !poem) return;
+    const storyRevision = storyRevisionRef.current;
     setBusy("revise");
     setError("");
     try {
@@ -246,6 +373,7 @@ export default function PoetryStudio() {
         current_poem: poem,
         revision_instruction: instruction,
       })) as Poem;
+      if (storyRevision !== storyRevisionRef.current) return;
       setPoem(data);
       if (data.submission_id) setSubmissionId(data.submission_id);
     } catch (requestError) {
@@ -262,14 +390,24 @@ export default function PoetryStudio() {
     formData.append("audio", blob, "story.webm");
     formData.append("duration_seconds", String(durationSeconds));
     try {
-      const response = await fetch("/api/transcribe", { method: "POST", body: formData });
+      const response = await fetchWithTimeout(
+        "/api/transcribe",
+        { method: "POST", body: formData },
+        90_000,
+      );
       const data = (await response.json()) as {
         error?: string;
         text?: string;
         submission_id?: string;
       };
       if (!response.ok) throw new Error(data.error || "تعذّر تفريغ التسجيل.");
+      storyRevisionRef.current += 1;
       setStory(data.text || "");
+      setAnalysis(null);
+      setAnalysisStory("");
+      setAnswers({});
+      setPoetryRequest("");
+      setPoem(null);
       if (data.submission_id) setSubmissionId(data.submission_id);
       setInputMode("text");
     } catch (requestError) {
@@ -344,14 +482,39 @@ export default function PoetryStudio() {
   };
 
   const reset = () => {
+    storyRevisionRef.current += 1;
     setStory("");
     setSubmissionId(null);
     setAnalysis(null);
+    setAnalysisStory("");
     setAnswers({});
     setPoetryRequest("");
     setPoem(null);
     setError("");
     setInputMode("text");
+    setDraftRestored(false);
+    setDraftSavedAt(null);
+    if (draftStorageKey) {
+      try {
+        window.localStorage.removeItem(draftStorageKey);
+      } catch {
+        // Storage availability is optional.
+      }
+    }
+  };
+
+  const updateStory = (value: string) => {
+    storyRevisionRef.current += 1;
+    setStory(value);
+    setDraftRestored(false);
+    if (analysis && value.trim() !== analysisStory) {
+      setAnalysis(null);
+      setAnalysisStory("");
+      setAnswers({});
+      setPoetryRequest("");
+      setPoem(null);
+      setError("عدّلت القصة، لذلك أزلنا التحليل السابق حتى تُراجع النسخة الحالية بدقة.");
+    }
   };
 
   const logout = async () => {
@@ -361,6 +524,24 @@ export default function PoetryStudio() {
     ]);
     window.location.assign("/login");
   };
+
+  const preferencesReady = Boolean(
+    analysis && analysis.questions.every((question) => (answers[question.id] || "").trim()),
+  );
+  const journeySteps = [
+    { label: "القصة", complete: story.trim().length >= 24 },
+    { label: "الفهم", complete: Boolean(analysis) },
+    { label: "الاختيارات", complete: preferencesReady },
+    { label: "القصيدة", complete: Boolean(poem) },
+  ];
+  const firstIncompleteJourney = journeySteps.findIndex((step) => !step.complete);
+  const activeJourneyIndex =
+    firstIncompleteJourney === -1 ? journeySteps.length - 1 : firstIncompleteJourney;
+  const draftTime = draftSavedAt
+    ? new Intl.DateTimeFormat("ar-KW", { hour: "numeric", minute: "2-digit" }).format(
+        new Date(draftSavedAt),
+      )
+    : null;
 
   return (
     <div className="app-shell">
@@ -428,6 +609,29 @@ export default function PoetryStudio() {
 
         <section className="studio-grid">
           <div className="card main-card">
+            <ol className="creation-progress" aria-label="تقدّم إنشاء القصيدة">
+              {journeySteps.map((step, index) => (
+                <li
+                  key={step.label}
+                  className={`${step.complete ? "complete" : ""} ${activeJourneyIndex === index ? "active" : ""}`}
+                  aria-current={activeJourneyIndex === index ? "step" : undefined}
+                >
+                  <span>{step.complete ? <Check size={14} /> : index + 1}</span>
+                  <strong>{step.label}</strong>
+                </li>
+              ))}
+            </ol>
+
+            {draftReady && story.trim() && (
+              <div className="draft-status" role="status">
+                <ShieldCheck size={16} />
+                <span>
+                  {draftRestored ? "استعدنا مسودتك على هذا الجهاز" : "تُحفظ مسودتك تلقائيًا على هذا الجهاز"}
+                  {draftTime ? ` • آخر حفظ ${draftTime}` : ""}
+                </span>
+              </div>
+            )}
+
             <div className="step-row">
               <div className="step-copy">
                 <div className="step-number">١</div>
@@ -468,7 +672,7 @@ export default function PoetryStudio() {
                   maxLength={3000}
                   placeholder={exampleStory}
                   value={story}
-                  onChange={(event) => setStory(event.target.value)}
+                  onChange={(event) => updateStory(event.target.value)}
                 />
                 <div className="char-count">{story.length} / ٣٠٠٠</div>
               </div>
@@ -625,7 +829,7 @@ export default function PoetryStudio() {
                     className="primary-button wide"
                     style={{ marginTop: 24 }}
                     onClick={generatePoem}
-                    disabled={busy !== null}
+                    disabled={busy !== null || !preferencesReady}
                   >
                     {busy === "generate" ? <LoadingDots /> : <Feather size={19} />}
                     {busy === "generate" ? "نكتب ونراجع الأبيات" : "اكتب القصيدة الآن"}

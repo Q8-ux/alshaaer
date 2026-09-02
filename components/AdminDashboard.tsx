@@ -4,6 +4,9 @@ import {
   Archive,
   ArrowRight,
   AudioLines,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
   Feather,
   FileText,
   KeyRound,
@@ -21,21 +24,36 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react
 
 type Verse = { sadr: string; ajz: string };
 type Poem = { title?: string; meter?: string; verses?: Verse[] };
+type AnalysisQuestion = { id: string; question: string };
+type Analysis = {
+  story_summary?: string;
+  emotional_core?: string;
+  recommended_purpose?: string;
+  recommended_meter?: string;
+  meter_reason?: string;
+  suggested_tone?: string;
+  questions?: AnalysisQuestion[];
+};
 
 type ArchiveItem = {
   id: string;
   sourceMode: "text" | "audio";
   storyText: string;
+  transcriptionText: string | null;
   requestText: string | null;
+  analysis: Analysis | null;
+  answers: Record<string, string> | null;
   poem: Poem | null;
   poemTitle: string | null;
   meter: string | null;
   verseCount: number | null;
-  state: string;
+  state: "received" | "audio_saved" | "analyzed" | "completed" | "failed";
   hasAudio: boolean;
   audioFilename: string | null;
   audioSize: number | null;
+  audioDurationSeconds: number | null;
   createdAt: string;
+  updatedAt: string;
   user: { id: string; email: string; displayName: string } | null;
 };
 
@@ -51,9 +69,17 @@ type ManagedUser = {
 };
 
 type DashboardData = {
-  metrics: { users: number; archive: number; poems: number; audio: number };
+  metrics: {
+    users: number;
+    archive: number;
+    poems: number;
+    audio: number;
+    written: number;
+    failed: number;
+  };
   users: ManagedUser[];
   archive: ArchiveItem[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
 };
 
 type TwilioConfigurationStatus = {
@@ -78,10 +104,33 @@ const formatBytes = (value: number | null) => {
   return `${(value / (1024 * 1024)).toFixed(1)} م.ب`;
 };
 
+const formatDuration = (value: number | null) => {
+  if (!value) return "";
+  const seconds = Math.max(0, Math.round(value));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+};
+
+const stateLabel: Record<ArchiveItem["state"], string> = {
+  received: "مستلمة",
+  audio_saved: "حُفظ التسجيل",
+  analyzed: "تم التحليل",
+  completed: "مكتملة",
+  failed: "تحتاج مراجعة",
+};
+
+const answerLabel = (item: ArchiveItem, key: string) =>
+  item.analysis?.questions?.find((question) => question.id === key)?.question || key;
+
 export default function AdminDashboard({ displayName }: { displayName: string }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [tab, setTab] = useState<"archive" | "users" | "activation">("archive");
   const [search, setSearch] = useState("");
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const [archivePage, setArchivePage] = useState(1);
+  const [sourceFilter, setSourceFilter] = useState<"all" | "text" | "audio">("all");
+  const [stateFilter, setStateFilter] = useState<
+    "all" | "received" | "audio_saved" | "analyzed" | "completed" | "failed"
+  >("all");
   const [error, setError] = useState("");
   const [busyUser, setBusyUser] = useState<string | null>(null);
   const [twilioStatus, setTwilioStatus] = useState<TwilioConfigurationStatus | null>(null);
@@ -96,24 +145,32 @@ export default function AdminDashboard({ displayName }: { displayName: string })
   const loadDashboard = useCallback(async () => {
     setError("");
     try {
-      const response = await fetch("/api/admin", { cache: "no-store" });
+      const query = new URLSearchParams({ page: String(archivePage), pageSize: "50" });
+      if (archiveSearch) query.set("search", archiveSearch);
+      if (sourceFilter !== "all") query.set("sourceMode", sourceFilter);
+      if (stateFilter !== "all") query.set("state", stateFilter);
+      const response = await fetch(`/api/admin?${query}`, { cache: "no-store" });
       if (response.status === 401 || response.status === 403) {
-        window.location.assign("/admin/login");
+        window.location.assign("/control-center/login");
         return;
       }
       const result = (await response.json()) as DashboardData & { error?: string };
       if (!response.ok) throw new Error(result.error || "تعذّر تحميل لوحة الإدارة.");
+      if (result.pagination.page !== archivePage) {
+        setArchivePage(result.pagination.page);
+        return;
+      }
       setData(result as DashboardData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "تعذّر تحميل لوحة الإدارة.");
     }
-  }, []);
+  }, [archivePage, archiveSearch, sourceFilter, stateFilter]);
 
   const loadTwilioStatus = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/integrations/twilio", { cache: "no-store" });
       if (response.status === 401 || response.status === 403) {
-        window.location.assign("/admin/login");
+        window.location.assign("/control-center/login");
         return;
       }
       const result = (await response.json()) as TwilioConfigurationStatus & { error?: string };
@@ -126,16 +183,28 @@ export default function AdminDashboard({ displayName }: { displayName: string })
 
   const logout = async () => {
     await fetch("/api/admin/session", { method: "DELETE" }).catch(() => undefined);
-    window.location.assign("/admin/login");
+    window.location.assign("/control-center/login");
   };
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadDashboard();
-      void loadTwilioStatus();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [loadDashboard, loadTwilioStatus]);
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadTwilioStatus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadTwilioStatus]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setArchivePage(1);
+      setArchiveSearch(search.trim());
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const updateUser = async (
     userId: string,
@@ -171,7 +240,7 @@ export default function AdminDashboard({ displayName }: { displayName: string })
         body: JSON.stringify(twilioForm),
       });
       if (response.status === 401 || response.status === 403) {
-        window.location.assign("/admin/login");
+        window.location.assign("/control-center/login");
         return;
       }
       const result = (await response.json()) as TwilioConfigurationStatus & { error?: string };
@@ -186,23 +255,6 @@ export default function AdminDashboard({ displayName }: { displayName: string })
     }
   };
 
-  const filteredArchive = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return data?.archive || [];
-    return (data?.archive || []).filter((item) =>
-      [
-        item.storyText,
-        item.poemTitle || "",
-        item.meter || "",
-        item.user?.displayName || "",
-        item.user?.email || "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [data, search]);
-
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return data?.users || [];
@@ -216,8 +268,8 @@ export default function AdminDashboard({ displayName }: { displayName: string })
       <header className="dashboard-topbar">
         <div>
           <div className="dashboard-kicker"><ShieldCheck size={17} /> لوحة المدير</div>
-          <h1>أرشيف «أنت الشاعر»</h1>
-          <p>مرحبًا {displayName}، هنا القصص والتسجيلات والقصائد وحسابات المستخدمين.</p>
+          <h1>مركز بيانات «أنت الشاعر»</h1>
+          <p>مرحبًا {displayName}، هنا القصائد وأوصافها وتفريغاتها وملفات شرحها الصوتية.</p>
         </div>
         <div className="dashboard-top-actions">
           <button type="button" className="secondary-button" onClick={() => void loadDashboard()}>
@@ -241,8 +293,10 @@ export default function AdminDashboard({ displayName }: { displayName: string })
           <section className="metric-grid" aria-label="ملخص الأرشيف">
             <div className="metric-card"><Users /><span>المستخدمون</span><strong>{data.metrics.users}</strong></div>
             <div className="metric-card"><Archive /><span>كل السجلات</span><strong>{data.metrics.archive}</strong></div>
+            <div className="metric-card"><FileText /><span>النصوص المكتوبة</span><strong>{data.metrics.written}</strong></div>
             <div className="metric-card"><Feather /><span>القصائد</span><strong>{data.metrics.poems}</strong></div>
             <div className="metric-card"><AudioLines /><span>التسجيلات</span><strong>{data.metrics.audio}</strong></div>
+            <div className="metric-card"><CircleAlert /><span>تحتاج مراجعة</span><strong>{data.metrics.failed}</strong></div>
           </section>
 
           <section className="dashboard-card">
@@ -282,61 +336,175 @@ export default function AdminDashboard({ displayName }: { displayName: string })
               )}
             </div>
 
+            {tab === "archive" && (
+              <div className="dashboard-filterbar" aria-label="ترشيح الأرشيف">
+                <label>
+                  <span>نوع المحتوى</span>
+                  <select
+                    value={sourceFilter}
+                    onChange={(event) => {
+                      setArchivePage(1);
+                      setSourceFilter(event.target.value as typeof sourceFilter);
+                    }}
+                  >
+                    <option value="all">الكل</option>
+                    <option value="text">نص مكتوب</option>
+                    <option value="audio">تسجيل صوتي</option>
+                  </select>
+                </label>
+                <label>
+                  <span>حالة السجل</span>
+                  <select
+                    value={stateFilter}
+                    onChange={(event) => {
+                      setArchivePage(1);
+                      setStateFilter(event.target.value as typeof stateFilter);
+                    }}
+                  >
+                    <option value="all">كل الحالات</option>
+                    <option value="received">مستلمة</option>
+                    <option value="audio_saved">حُفظ التسجيل</option>
+                    <option value="analyzed">تم التحليل</option>
+                    <option value="completed">مكتملة</option>
+                    <option value="failed">تحتاج مراجعة</option>
+                  </select>
+                </label>
+                <span className="dashboard-result-count">{data.pagination.total} سجل مطابق</span>
+              </div>
+            )}
+
             {tab === "archive" ? (
               <div className="archive-list">
-                {filteredArchive.length === 0 ? (
+                {data.archive.length === 0 ? (
                   <div className="empty-state">لا توجد نتائج مطابقة في الأرشيف.</div>
                 ) : (
-                  filteredArchive.map((item) => (
-                    <details className="archive-item" key={item.id}>
-                      <summary>
-                        <div className="archive-icon">
-                          {item.hasAudio ? <AudioLines size={19} /> : <FileText size={19} />}
-                        </div>
-                        <div className="archive-summary-copy">
-                          <strong>{item.poemTitle || "قصة قيد التحويل إلى قصيدة"}</strong>
-                          <span>{item.user?.displayName || "مستخدم"} • {formatDate(item.createdAt)}</span>
-                        </div>
-                        <div className="archive-badges">
-                          {item.meter && <span>{item.meter}</span>}
-                          <span>{item.hasAudio ? "صوت" : "كتابة"}</span>
-                          <span>{item.state === "completed" ? "مكتملة" : "قيد المعالجة"}</span>
-                        </div>
-                      </summary>
-                      <div className="archive-details">
-                        <div className="archive-user-line">
-                          <strong>{item.user?.displayName || "مستخدم"}</strong>
-                          <span>{item.user?.email}</span>
-                        </div>
-                        <div className="archive-block">
-                          <h3>القصة الأصلية</h3>
-                          <p>{item.storyText || "لم يُحفظ نص واضح بعد."}</p>
-                        </div>
-                        {item.requestText && (
-                          <div className="archive-block compact">
-                            <h3>طلب المستخدم للقصيدة</h3>
-                            <p>{item.requestText}</p>
+                  data.archive.map((item) => {
+                    const answerEntries = Object.entries(item.answers || {}).filter(
+                      ([key, value]) => key !== "custom_request" && value.trim(),
+                    );
+                    return (
+                      <details className="archive-item" key={item.id}>
+                        <summary>
+                          <div className="archive-icon">
+                            {item.hasAudio ? <AudioLines size={19} /> : <FileText size={19} />}
                           </div>
-                        )}
-                        {item.hasAudio && (
-                          <div className="archive-audio">
-                            <div><AudioLines size={18} /> التسجيل الأصلي {formatBytes(item.audioSize)}</div>
-                            <audio controls preload="none" src={`/api/audio/${item.id}`} />
+                          <div className="archive-summary-copy">
+                            <strong>{item.poemTitle || "قصة قيد التحويل إلى قصيدة"}</strong>
+                            <span>{item.user?.displayName || "مستخدم"} • {formatDate(item.createdAt)}</span>
                           </div>
-                        )}
-                        {item.poem?.verses?.length ? (
-                          <div className="archive-poem">
-                            <h3>{item.poem.title || item.poemTitle}</h3>
-                            {item.poem.verses.map((verse, index) => (
-                              <div className="archive-verse" key={`${item.id}-${index}`}>
-                                <span>{verse.sadr}</span><i>◆</i><span>{verse.ajz}</span>
-                              </div>
-                            ))}
+                          <div className="archive-badges">
+                            {item.meter && <span>{item.meter}</span>}
+                            <span>{item.hasAudio ? "صوت" : "كتابة"}</span>
+                            <span className={item.state === "failed" ? "warning" : ""}>
+                              {stateLabel[item.state]}
+                            </span>
                           </div>
-                        ) : null}
-                      </div>
-                    </details>
-                  ))
+                        </summary>
+                        <div className="archive-details">
+                          <div className="archive-user-line">
+                            <strong>{item.user?.displayName || "مستخدم"}</strong>
+                            <span>{item.user?.email}</span>
+                            <span>أُنشئ {formatDate(item.createdAt)}</span>
+                            <span>آخر تحديث {formatDate(item.updatedAt)}</span>
+                          </div>
+                          <div className="archive-block">
+                            <h3>نص القصة أو وصف القصيدة</h3>
+                            <p>{item.storyText || "لم يُحفظ نص واضح بعد."}</p>
+                          </div>
+                          {item.sourceMode === "audio" && item.transcriptionText && (
+                            <div className="archive-block transcript">
+                              <h3>التفريغ النصي للتسجيل</h3>
+                              <p>{item.transcriptionText}</p>
+                            </div>
+                          )}
+                          {item.analysis && (
+                            <div className="archive-analysis-grid">
+                              {item.analysis.story_summary && (
+                                <div><span>ملخص القصة</span><p>{item.analysis.story_summary}</p></div>
+                              )}
+                              {item.analysis.emotional_core && (
+                                <div><span>المحور الشعوري</span><p>{item.analysis.emotional_core}</p></div>
+                              )}
+                              {item.analysis.recommended_purpose && (
+                                <div><span>الغرض المقترح</span><p>{item.analysis.recommended_purpose}</p></div>
+                              )}
+                              {item.analysis.suggested_tone && (
+                                <div><span>النبرة المقترحة</span><p>{item.analysis.suggested_tone}</p></div>
+                              )}
+                              {item.analysis.recommended_meter && (
+                                <div><span>البحر المقترح</span><p>{item.analysis.recommended_meter}</p></div>
+                              )}
+                              {item.analysis.meter_reason && (
+                                <div><span>سبب الاختيار</span><p>{item.analysis.meter_reason}</p></div>
+                              )}
+                            </div>
+                          )}
+                          {item.requestText && (
+                            <div className="archive-block compact">
+                              <h3>طلب المستخدم للقصيدة</h3>
+                              <p>{item.requestText}</p>
+                            </div>
+                          )}
+                          {answerEntries.length > 0 && (
+                            <div className="archive-block answers">
+                              <h3>تفاصيل وتفضيلات صاحب القصة</h3>
+                              <dl>
+                                {answerEntries.map(([key, value]) => (
+                                  <div key={key}>
+                                    <dt>{answerLabel(item, key)}</dt>
+                                    <dd>{value}</dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            </div>
+                          )}
+                          {item.hasAudio && (
+                            <div className="archive-audio">
+                              <div><AudioLines size={18} /> ملف شرح القصة الصوتي</div>
+                              <p>
+                                {[item.audioFilename, formatDuration(item.audioDurationSeconds), formatBytes(item.audioSize)]
+                                  .filter(Boolean)
+                                  .join(" • ")}
+                              </p>
+                              <audio controls preload="none" src={`/api/audio/${item.id}`} />
+                            </div>
+                          )}
+                          {item.poem?.verses?.length ? (
+                            <div className="archive-poem">
+                              <h3>{item.poem.title || item.poemTitle}</h3>
+                              <p className="archive-poem-meta">
+                                {[item.meter, item.verseCount ? `${item.verseCount} أبيات` : ""].filter(Boolean).join(" • ")}
+                              </p>
+                              {item.poem.verses.map((verse, index) => (
+                                <div className="archive-verse" key={`${item.id}-${index}`}>
+                                  <span>{verse.sadr}</span><i>◆</i><span>{verse.ajz}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </details>
+                    );
+                  })
+                )}
+                {data.pagination.totalPages > 1 && (
+                  <nav className="archive-pagination" aria-label="صفحات الأرشيف">
+                    <button
+                      type="button"
+                      disabled={archivePage <= 1}
+                      onClick={() => setArchivePage((page) => Math.max(1, page - 1))}
+                    >
+                      <ChevronRight size={17} /> السابق
+                    </button>
+                    <span>صفحة {data.pagination.page} من {data.pagination.totalPages}</span>
+                    <button
+                      type="button"
+                      disabled={archivePage >= data.pagination.totalPages}
+                      onClick={() => setArchivePage((page) => page + 1)}
+                    >
+                      التالي <ChevronLeft size={17} />
+                    </button>
+                  </nav>
                 )}
               </div>
             ) : tab === "users" ? (
