@@ -1,0 +1,21 @@
+{
+  "projects": {
+    "ant-alshaer": {
+      "token_env": "MASAR_ANT_ALSHAER_TOKEN",
+      "allowed_hosts": [
+        "www.youtube.com",
+        "youtu.be",
+        "www.reddit.com",
+        "x.com",
+        "ich.gov.kw",
+        "www.aldiwan.net",
+        "www.folkculturebh.org"
+      ],
+      "max_urls": 8,
+      "requests_per_minute": 6,
+      "browser": true,
+      "social": true,
+      "llm": true
+    }
+  }
+}

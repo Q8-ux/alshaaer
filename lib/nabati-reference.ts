@@ -92,6 +92,46 @@ export const NABATI_METERS = [
   },
 ] as const;
 
+// Metadata and independently worded notes only. The application does not copy
+// book text, poems, glossaries, or corpus records from these references.
+export const DIALECT_REFERENCE_SOURCES = [
+  {
+    title: "Najdi Arabic: Central Arabian",
+    author: "Bruce Ingham",
+    publisher: "John Benjamins",
+    url: "https://benjamins.com/catalog/loall.1",
+    scope: "النحو والصوت والاستعمال الشفهي في اللهجة النجدية الوسطى",
+  },
+  {
+    title: "North East Arabian Dialects",
+    author: "Bruce Ingham",
+    publisher: "Routledge",
+    url: "https://www.taylorfrancis.com/books/mono/10.4324/9780203037652/north-east-arabian-dialects-bruce-ingham",
+    scope: "اللهجات البدوية والخليجية في شمال شرقي الجزيرة",
+  },
+  {
+    title: "Oral Poetry and Narratives from Central Arabia",
+    author: "Marcel Kurpershoek",
+    publisher: "Brill",
+    url: "https://brill.com/display/package/9789004147386?language=en",
+    scope: "الشعر والرواية الشفهية من وسط وجنوب نجد",
+  },
+  {
+    title: "منصة سِوار للمعاجم اللغوية",
+    author: "مجمع الملك سلمان العالمي للغة العربية",
+    publisher: "مجمع الملك سلمان العالمي للغة العربية",
+    url: "https://siwar.ksaa.gov.sa/aboutus",
+    scope: "التحقق من الجذور والدلالات عبر المعاجم المؤسسية",
+  },
+  {
+    title: "فلك — المدونات اللغوية العربية",
+    author: "مجمع الملك سلمان العالمي للغة العربية",
+    publisher: "مركز ذكاء العربية",
+    url: "https://arai.ksaa.gov.sa/",
+    scope: "سياقات الاستعمال والتكرار في المدونات العربية",
+  },
+] as const;
+
 export const CORE_RULES = [
   "مرجع الوزن في الشعر النبطي هو المنطوق والغناء أو الهيجنة؛ لا يكفي عد الحروف أو فرض تفعيلات الفصحى آليًا.",
   "سلامة اللفظ والمعنى معًا شرط؛ إصلاح الوزن لا يبرر لفظًا ضعيفًا أو معنى ميتًا.",
@@ -110,6 +150,11 @@ export const CORE_RULES = [
   "تجنب إعادة كلمة القافية بلفظها ومعناها قبل سبعة أبيات احتياطًا من الإيطاء.",
   "لزوم ما لا يلزم زينة موسيقية لا تستخدم إذا دفعت إلى الحشو أو أفسدت المعنى.",
   "الشكل وزن وقافية، لكن المضمون والتجربة هما ما يمنح القصيدة حياتها.",
+  "تُقبل المفردة النجدية بعد تحديد منطقتها وجيل استعمالها وسياقها المنطوق؛ وجودها في عينة واحدة لا يجعلها ممثلة لكل نجد.",
+  "لا تُعمّم المفردة البدوية على القبائل والمناطق كلها؛ تُسجّل بيئتها ودلالتها ويُختبر انسجامها مع لهجة القصيدة.",
+  "تُراجع الكلمة داخل العبارة والسياق الشفهي، لا بوصفها مدخلًا منفردًا؛ فالسياق والأداء قد يغيّران الدلالة والاستعمال.",
+  "تُستخدم المعاجم المؤسسية للتحقق من الجذر والدلالة، لكنها لا تثبت وحدها شيوع اللفظ في اللهجة النجدية أو البدوية.",
+  "يُستأنس بتكرار المفردة في المدونات بعد التحقق من زمن النص ومنطقته ونوعه؛ الكثرة خارج المجال الشعري أو اللهجي ليست دليلًا كافيًا.",
 ] as const;
 
 export const REFERENCE_FACTS = {
@@ -119,7 +164,7 @@ export const REFERENCE_FACTS = {
   pageCount: 792,
   poetCount: 175,
   meterCount: 13,
-  ruleCount: 19,
+  ruleCount: CORE_RULES.length,
   quality:
     "القواعد المحورية روجعت بصريًا، أما فهرس OCR الخام فهو وسيلة وصول لا نصًا محققًا، ولا يعتمد لنسبة بيت أو حكم دقيق.",
 } as const;
@@ -130,6 +175,9 @@ export function buildReferenceContext() {
       `- ${meter.name} (${meter.category}): ${meter.structure} القافية: ${meter.rhyme} الأداء: ${meter.performance}`,
   ).join("\n");
   const rules = CORE_RULES.map((rule, index) => `${index + 1}. ${rule}`).join("\n");
+  const dialectSources = DIALECT_REFERENCE_SOURCES.map(
+    (source) => `- ${source.title} — ${source.scope}`,
+  ).join("\n");
 
   return `
 مرجع العمل: ${REFERENCE_FACTS.title}، ${REFERENCE_FACTS.volumes.join(" و")}، ${REFERENCE_FACTS.author}.
@@ -139,6 +187,9 @@ ${meters}
 
 القواعد المحورية:
 ${rules}
+
+مراجع اللهجات والمفردات:
+${dialectSources}
 
 حدود المرجع والجودة:
 ${REFERENCE_FACTS.quality}

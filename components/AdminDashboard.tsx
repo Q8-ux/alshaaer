@@ -9,6 +9,7 @@ import {
   CircleAlert,
   Feather,
   FileText,
+  Globe2,
   KeyRound,
   LogOut,
   MailCheck,
@@ -87,6 +88,26 @@ type TwilioConfigurationStatus = {
   source: "environment" | "secure_storage" | null;
 };
 
+type ResearchResult = {
+  status?: "ok" | "partial" | "failed";
+  sources?: Array<{
+    id: string;
+    url: string;
+    title?: string;
+    provider?: string;
+    retrieved_at?: string;
+  }>;
+  analysis?: {
+    mode?: string;
+    findings?: Array<{ text: string; source_ids: string[] }>;
+    gaps?: string[];
+    counterarguments?: string[];
+    recommendations?: string[];
+  };
+  errors?: Array<{ code?: string; message?: string; url?: string }>;
+  counts?: { requested?: number; attempted?: number; collected?: number };
+};
+
 const formatDate = (value: string) => {
   try {
     return new Intl.DateTimeFormat("ar-KW", {
@@ -123,7 +144,7 @@ const answerLabel = (item: ArchiveItem, key: string) =>
 
 export default function AdminDashboard({ displayName }: { displayName: string }) {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [tab, setTab] = useState<"archive" | "users" | "activation">("archive");
+  const [tab, setTab] = useState<"archive" | "users" | "research" | "activation">("archive");
   const [search, setSearch] = useState("");
   const [archiveSearch, setArchiveSearch] = useState("");
   const [archivePage, setArchivePage] = useState(1);
@@ -140,6 +161,15 @@ export default function AdminDashboard({ displayName }: { displayName: string })
     accountSid: "",
     authToken: "",
     serviceSid: "",
+  });
+  const [researchBusy, setResearchBusy] = useState(false);
+  const [researchResult, setResearchResult] = useState<ResearchResult | null>(null);
+  const [researchForm, setResearchForm] = useState({
+    query: "",
+    urls: "",
+    discover: false,
+    provider: "auto" as "auto" | "web" | "browser" | "youtube" | "x" | "reddit",
+    useLlm: true,
   });
 
   const loadDashboard = useCallback(async () => {
@@ -255,6 +285,42 @@ export default function AdminDashboard({ displayName }: { displayName: string })
     }
   };
 
+  const runResearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setResearchBusy(true);
+    setResearchResult(null);
+    setError("");
+    try {
+      const urls = researchForm.urls
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const response = await fetch("/api/admin/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: researchForm.query,
+          urls,
+          discover: researchForm.discover,
+          provider: researchForm.provider,
+          language: "ar",
+          use_llm: researchForm.useLlm,
+        }),
+      });
+      if (response.status === 401 || response.status === 403) {
+        window.location.assign("/control-center/login");
+        return;
+      }
+      const result = (await response.json()) as ResearchResult & { error?: string };
+      if (!response.ok) throw new Error(result.error || "تعذّر إكمال بحث المصادر.");
+      setResearchResult(result);
+    } catch (researchError) {
+      setError(researchError instanceof Error ? researchError.message : "تعذّر إكمال بحث المصادر.");
+    } finally {
+      setResearchBusy(false);
+    }
+  };
+
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return data?.users || [];
@@ -323,8 +389,15 @@ export default function AdminDashboard({ displayName }: { displayName: string })
                 >
                   <MailCheck size={17} /> تفعيل البريد
                 </button>
+                <button
+                  type="button"
+                  className={tab === "research" ? "active" : ""}
+                  onClick={() => setTab("research")}
+                >
+                  <Globe2 size={17} /> بحث المصادر
+                </button>
               </div>
-              {tab !== "activation" && (
+              {(tab === "archive" || tab === "users") && (
                 <label className="dashboard-search">
                   <Search size={18} />
                   <input
@@ -546,6 +619,146 @@ export default function AdminDashboard({ displayName }: { displayName: string })
                   </tbody>
                 </table>
               </div>
+            ) : tab === "research" ? (
+              <section className="research-panel" aria-label="بحث وتحليل المصادر">
+                <div className="integration-panel-head">
+                  <div className="integration-icon"><Globe2 size={20} /></div>
+                  <div>
+                    <h2>بحث المصادر والمراجع</h2>
+                    <p>اجمع الأدلة من مصادر عامة ثم راجع النتائج قبل استخدامها في المحتوى.</p>
+                  </div>
+                </div>
+
+                <form className="research-form" onSubmit={runResearch}>
+                  <label>
+                    <span>سؤال البحث</span>
+                    <textarea
+                      value={researchForm.query}
+                      onChange={(event) => setResearchForm((current) => ({ ...current, query: event.target.value }))}
+                      placeholder="مثال: ما سمات الإلقاء المناسبة لقصائد الحكمة النبطية؟"
+                      maxLength={1500}
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>روابط المصادر — رابط واحد في كل سطر</span>
+                    <textarea
+                      dir="ltr"
+                      value={researchForm.urls}
+                      onChange={(event) => setResearchForm((current) => ({ ...current, urls: event.target.value }))}
+                      placeholder={"https://example.org/source\nhttps://www.youtube.com/watch?v=…"}
+                    />
+                  </label>
+                  <div className="research-options">
+                    <label>
+                      <span>طريقة القراءة</span>
+                      <select
+                        value={researchForm.provider}
+                        onChange={(event) => setResearchForm((current) => ({
+                          ...current,
+                          provider: event.target.value as typeof current.provider,
+                        }))}
+                      >
+                        <option value="auto">تلقائي</option>
+                        <option value="web">صفحة عامة</option>
+                        <option value="browser">متصفح</option>
+                        <option value="youtube">YouTube</option>
+                        <option value="x">X</option>
+                        <option value="reddit">Reddit</option>
+                      </select>
+                    </label>
+                    <label className="research-check">
+                      <input
+                        type="checkbox"
+                        checked={researchForm.discover}
+                        onChange={(event) => setResearchForm((current) => ({ ...current, discover: event.target.checked }))}
+                      />
+                      اكتشاف مصادر إضافية
+                    </label>
+                    <label className="research-check">
+                      <input
+                        type="checkbox"
+                        checked={researchForm.useLlm}
+                        onChange={(event) => setResearchForm((current) => ({ ...current, useLlm: event.target.checked }))}
+                      />
+                      تلخيص الأدلة
+                    </label>
+                  </div>
+                  <div className="integration-help">
+                    هذا المسار للقراءة والاقتراح فقط. لا ينشر محتوى ولا يغيّر قصيدة أو سجلًا تلقائيًا.
+                  </div>
+                  <button className="primary-button research-submit" type="submit" disabled={researchBusy}>
+                    <Search size={18} /> {researchBusy ? "جارٍ جمع المصادر…" : "ابدأ البحث"}
+                  </button>
+                </form>
+
+                {researchResult && (
+                  <div className="research-results" aria-live="polite">
+                    <div className={`research-summary ${researchResult.status || "partial"}`}>
+                      <strong>{researchResult.status === "ok" ? "اكتمل البحث" : researchResult.status === "failed" ? "لم تُجمع مصادر قابلة للاستخدام" : "نتيجة جزئية تحتاج مراجعة"}</strong>
+                      <span>
+                        جُمعت {researchResult.counts?.collected || 0} من {researchResult.counts?.requested || 0} مصادر مطلوبة.
+                      </span>
+                    </div>
+
+                    {(researchResult.analysis?.findings || []).length > 0 && (
+                      <section className="research-block">
+                        <h3>النتائج المدعومة بالمصادر</h3>
+                        <ol>
+                          {researchResult.analysis?.findings?.map((finding, index) => (
+                            <li key={`${index}-${finding.source_ids.join("-")}`}>
+                              <p>{finding.text}</p>
+                              <span>{finding.source_ids.join("، ")}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </section>
+                    )}
+
+                    {(researchResult.analysis?.recommendations || []).length > 0 && (
+                      <section className="research-block">
+                        <h3>الخطوات المقترحة</h3>
+                        <ul>{researchResult.analysis?.recommendations?.map((item) => <li key={item}>{item}</li>)}</ul>
+                      </section>
+                    )}
+
+                    {(researchResult.analysis?.counterarguments || []).length > 0 && (
+                      <section className="research-block warning">
+                        <h3>أدلة أو آراء معارضة</h3>
+                        <ul>{researchResult.analysis?.counterarguments?.map((item) => <li key={item}>{item}</li>)}</ul>
+                      </section>
+                    )}
+
+                    {(researchResult.analysis?.gaps || []).length > 0 && (
+                      <section className="research-block warning">
+                        <h3>الثغرات والحدود</h3>
+                        <ul>{researchResult.analysis?.gaps?.map((item) => <li key={item}>{item}</li>)}</ul>
+                      </section>
+                    )}
+
+                    {(researchResult.sources || []).length > 0 && (
+                      <section className="research-block sources">
+                        <h3>المصادر</h3>
+                        <div className="research-source-list">
+                          {researchResult.sources?.map((source) => (
+                            <a key={source.id} href={source.url} target="_blank" rel="noopener noreferrer">
+                              <strong>{source.id} — {source.title || new URL(source.url).hostname}</strong>
+                              <span>{[source.provider, source.retrieved_at ? formatDate(source.retrieved_at) : ""].filter(Boolean).join(" • ")}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {(researchResult.errors || []).length > 0 && (
+                      <section className="research-block warning">
+                        <h3>مصادر تعذّر جمعها</h3>
+                        <ul>{researchResult.errors?.map((item, index) => <li key={`${item.code}-${index}`}>{item.message || item.code || "تعذّر قراءة المصدر"}</li>)}</ul>
+                      </section>
+                    )}
+                  </div>
+                )}
+              </section>
             ) : (
               <section className="integration-panel" aria-label="إعداد تفعيل البريد الإلكتروني">
                 <div className="integration-panel-head">

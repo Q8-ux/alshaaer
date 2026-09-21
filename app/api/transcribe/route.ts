@@ -8,6 +8,7 @@ import {
 } from "@/lib/archive-store";
 import type { UserRecord } from "@/db/schema";
 import { getRuntimeStringBinding } from "@/lib/runtime-bindings";
+import { assertSafePoetryContent, contentSafetyErrorResponse } from "@/lib/content-safety";
 
 export const runtime = "edge";
 
@@ -47,7 +48,8 @@ export async function POST(request: Request) {
     });
     activeSubmissionId = saved.submissionId;
 
-    const transcription = await getClient().audio.transcriptions.create({
+    const client = getClient();
+    const transcription = await client.audio.transcriptions.create({
       file: audio,
       model: "gpt-transcribe",
       language: "ar",
@@ -60,12 +62,15 @@ export async function POST(request: Request) {
       return Response.json({ error: "لم يظهر كلام واضح في التسجيل. جرّب في مكان أهدأ." }, { status: 422 });
     }
 
+    await assertSafePoetryContent(client, [text], "transcript");
     await saveTranscription(activeUser.id, activeSubmissionId, text);
     return Response.json({ text, submission_id: activeSubmissionId });
   } catch (error) {
     if (activeUser && activeSubmissionId) {
       await markSubmissionFailed(activeUser.id, activeSubmissionId).catch(() => undefined);
     }
+    const safetyResponse = contentSafetyErrorResponse(error);
+    if (safetyResponse) return safetyResponse;
     if (
       error instanceof ArchiveError ||
       (error instanceof Error &&

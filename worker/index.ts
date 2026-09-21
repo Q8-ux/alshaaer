@@ -22,6 +22,9 @@ interface Env {
   OPENAI_ANALYSIS_MODEL?: string;
   OPENAI_DRAFT_MODEL?: string;
   OPENAI_POETRY_MODEL?: string;
+  OPENAI_SAFETY_MODEL?: string;
+  MASAR_API_URL?: string;
+  MASAR_ANT_ALSHAER_TOKEN?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {

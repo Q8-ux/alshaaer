@@ -12,6 +12,11 @@ import {
 } from "@/lib/archive-store";
 import type { UserRecord } from "@/db/schema";
 import { getRuntimeStringBinding } from "@/lib/runtime-bindings";
+import {
+  assertSafePoetryContent,
+  contentSafetyErrorResponse,
+  POETRY_SAFETY_POLICY_AR,
+} from "@/lib/content-safety";
 
 export const runtime = "edge";
 
@@ -132,6 +137,8 @@ async function analyzeStory(client: OpenAI, story: string) {
 أنت محرر شعر نبطي خليجي وخبير في تحويل الحكايات الشخصية إلى مواصفات قصيدة دقيقة.
 مهمتك في هذه المرحلة الفهم والسؤال فقط، ولا تكتب أبياتًا.
 
+${POETRY_SAFETY_POLICY_AR}
+
 اعمل وفق المرجع التالي:
 ${referenceContext}
 
@@ -195,6 +202,8 @@ async function createDraft(
 أنت شاعر نبطي خليجي أصيل ومحرر عروض دقيق. اكتب مسودة أصلية بالكامل انطلاقًا من قصة المستخدم.
 لا تحاكِ شاعرًا بعينه، ولا تنسخ بيتًا محفوظًا أو تركيبًا مشهورًا، ولا تنسب القصيدة إلى شاعر آخر.
 
+${POETRY_SAFETY_POLICY_AR}
+
 المرجع الملزم للبناء:
 ${referenceContext}
 
@@ -242,6 +251,8 @@ async function auditDraft(
         content: `
 أنت المراجع النهائي لقصيدة نبطية خليجية. راجع المسودة ثم أعد كتابتها عند الحاجة، وقدم النسخة النهائية فقط.
 
+${POETRY_SAFETY_POLICY_AR}
+
 مرجع المراجعة:
 ${referenceContext}
 
@@ -288,6 +299,11 @@ export async function POST(request: Request) {
     const body = RequestSchema.parse(await request.json());
     activeUser = await requireAppUser();
     const client = getClient();
+    await assertSafePoetryContent(
+      client,
+      [body.story, body.answers, body.current_poem, body.revision_instruction],
+      "input",
+    );
 
     if (body.mode === "analyze") {
       activeSubmissionId = await startStorySubmission({
@@ -320,6 +336,7 @@ export async function POST(request: Request) {
         body.current_poem,
         body.revision_instruction,
       );
+      await assertSafePoetryContent(client, [final], "output");
       await savePoem({
         user: activeUser,
         submissionId: activeSubmissionId,
@@ -331,6 +348,7 @@ export async function POST(request: Request) {
 
     const draft = await createDraft(client, body.story, body.analysis, answers);
     const final = await auditDraft(client, body.story, body.analysis, answers, draft);
+    await assertSafePoetryContent(client, [final], "output");
     await savePoem({
       user: activeUser,
       submissionId: activeSubmissionId,
@@ -342,6 +360,8 @@ export async function POST(request: Request) {
     if (activeUser && activeSubmissionId) {
       await markSubmissionFailed(activeUser.id, activeSubmissionId).catch(() => undefined);
     }
+    const safetyResponse = contentSafetyErrorResponse(error);
+    if (safetyResponse) return safetyResponse;
     if (error instanceof z.ZodError) {
       return Response.json({ error: "بيانات القصة أو الاختيارات غير مكتملة." }, { status: 400 });
     }

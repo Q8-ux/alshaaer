@@ -16,6 +16,9 @@ export type RuntimeBindings = {
   OPENAI_ANALYSIS_MODEL?: string;
   OPENAI_DRAFT_MODEL?: string;
   OPENAI_POETRY_MODEL?: string;
+  OPENAI_SAFETY_MODEL?: string;
+  MASAR_API_URL?: string;
+  MASAR_ANT_ALSHAER_TOKEN?: string;
 };
 
 const BINDINGS_KEY = "__ant_alshaer_runtime_bindings__";

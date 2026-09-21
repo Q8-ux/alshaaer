@@ -705,7 +705,7 @@ export default function PoetryStudio() {
             <div className="action-row">
               <div className="privacy-note">
                 <LockKeyhole size={14} />
-                المحتوى محفوظ ولا يظهر للمستخدمين الآخرين
+                المحتوى خاص، ويُرفض السب والقذف والإساءة
               </div>
               <button
                 type="button"
